@@ -1,0 +1,12 @@
+[Unit]
+Description=Rust Weather Webservice
+After=network.target
+
+[Service]
+WorkingDirectory=/home/passi/.weatherapp
+ExecStart=/home/passi/Code/WeatherApp/target/debug/webservice
+Restart=always
+User=passi
+
+[Install]
+WantedBy=multi-user.target
