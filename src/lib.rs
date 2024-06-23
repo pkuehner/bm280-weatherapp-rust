@@ -1,8 +1,12 @@
 extern crate bme280;
 extern crate linux_embedded_hal as hal;
 
+use core::time;
+
 use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection, Result};
+use now::DateTimeNow;
+use chrono::Utc;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Measurement {
@@ -12,7 +16,7 @@ pub struct Measurement {
     pub(crate) humidity: f64,
 }
 
-pub const DB_FILE_NAME: &str = "./db.sqlite";
+pub const DB_FILE_NAME: &str = "db.sqlite";//"/home/passi/.weatherapp/db.sqlite";
 
 pub struct DbService<'a> {
     connection: &'a Connection,
@@ -72,5 +76,31 @@ impl<'a> DbService<'a> {
             return measurement;
         }
         !panic!("Test");
+    }
+
+    fn get_by_timestamp(&mut self, timestamp: i64) -> Result<Vec<Measurement>, rusqlite::Error> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT timestamp, pressure, temperature, humidity FROM Measurement WHERE timestamp > (?) ORDER BY timestamp desc")?;
+        //let now = Utc::now();
+        //let beginning_of_day = now.beginning_of_day().timestamp();
+        //now.beginning_of_week();
+        let measurement_iter = stmt.query_map([timestamp], |row| {
+            Ok(Measurement {
+                timestamp: row.get(0)?,
+                pressure: row.get(1)?,
+                temperature: row.get(2)?,
+                humidity: row.get(3)?,
+            })
+        })?;
+
+        // Here we unwrap
+        return Ok(measurement_iter.filter_map(|measurement| measurement.ok()).collect::<Vec<Measurement>>());
+    }
+
+    pub fn get_by_start_of_day(&mut self) -> Result<Vec<Measurement>, rusqlite::Error> {
+        let now = Utc::now();
+        let beginning_of_day = now.beginning_of_day().timestamp();
+        return self.get_by_timestamp(beginning_of_day);
     }
 }

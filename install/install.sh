@@ -1,5 +1,6 @@
 #!/bin/bash
 sudo cp ../Rocket.toml /home/passi/.weatherapp/Rocket.toml
+sudo cp -r ../html /home/passi/.weatherapp
 sudo cp weather-webapp.service /etc/systemd/system/weather-webapp.service
 sudo cp weather-ingest.service /etc/systemd/system/weather-ingest.service
 
