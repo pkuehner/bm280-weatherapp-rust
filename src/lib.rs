@@ -16,6 +16,14 @@ pub struct Measurement {
     pub(crate) humidity: f64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AverageData {
+    pub label: String,
+    pub avg_temperature: f64,
+    pub avg_humidity: f64,
+    pub count: i64,
+}
+
 pub const DB_FILE_NAME: &str = "db.sqlite";//"/home/passi/.weatherapp/db.sqlite";
 
 pub struct DbService<'a> {
@@ -102,5 +110,141 @@ impl<'a> DbService<'a> {
         let now = Utc::now();
         let beginning_of_day = now.beginning_of_day().timestamp();
         return self.get_by_timestamp(beginning_of_day);
+    }
+
+    pub fn get_hourly_averages(&mut self, start_timestamp: Option<i64>, end_timestamp: Option<i64>) -> Result<Vec<AverageData>, rusqlite::Error> {
+        let (query, params_vec): (&str, Vec<i64>) = match (start_timestamp, end_timestamp) {
+            (Some(start), Some(end)) => {
+                ("SELECT strftime('%H', datetime(timestamp, 'unixepoch')) as hour, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 WHERE timestamp >= ? AND timestamp <= ?
+                 GROUP BY hour 
+                 ORDER BY hour", vec![start, end])
+            },
+            (Some(start), None) => {
+                ("SELECT strftime('%H', datetime(timestamp, 'unixepoch')) as hour, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 WHERE timestamp >= ?
+                 GROUP BY hour 
+                 ORDER BY hour", vec![start])
+            },
+            _ => {
+                ("SELECT strftime('%H', datetime(timestamp, 'unixepoch')) as hour, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 GROUP BY hour 
+                 ORDER BY hour", vec![])
+            }
+        };
+
+        let mut stmt = self.connection.prepare(query)?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+        
+        let result_iter = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(AverageData {
+                label: format!("Hour {}", row.get::<_, String>(0)?),
+                avg_temperature: row.get(1)?,
+                avg_humidity: row.get(2)?,
+                count: row.get(3)?,
+            })
+        })?;
+
+        Ok(result_iter.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn get_weekday_averages(&mut self, start_timestamp: Option<i64>, end_timestamp: Option<i64>) -> Result<Vec<AverageData>, rusqlite::Error> {
+        let (query, params_vec): (&str, Vec<i64>) = match (start_timestamp, end_timestamp) {
+            (Some(start), Some(end)) => {
+                ("SELECT strftime('%w', datetime(timestamp, 'unixepoch')) as weekday, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 WHERE timestamp >= ? AND timestamp <= ?
+                 GROUP BY weekday 
+                 ORDER BY weekday", vec![start, end])
+            },
+            (Some(start), None) => {
+                ("SELECT strftime('%w', datetime(timestamp, 'unixepoch')) as weekday, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 WHERE timestamp >= ?
+                 GROUP BY weekday 
+                 ORDER BY weekday", vec![start])
+            },
+            _ => {
+                ("SELECT strftime('%w', datetime(timestamp, 'unixepoch')) as weekday, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 GROUP BY weekday 
+                 ORDER BY weekday", vec![])
+            }
+        };
+
+        let mut stmt = self.connection.prepare(query)?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+        
+        let weekday_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        
+        let result_iter = stmt.query_map(params_refs.as_slice(), |row| {
+            let weekday_num: String = row.get(0)?;
+            let weekday_idx = weekday_num.parse::<usize>().unwrap_or(0);
+            Ok(AverageData {
+                label: weekday_names.get(weekday_idx).unwrap_or(&"Unknown").to_string(),
+                avg_temperature: row.get(1)?,
+                avg_humidity: row.get(2)?,
+                count: row.get(3)?,
+            })
+        })?;
+
+        Ok(result_iter.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn get_monthly_averages(&mut self, start_timestamp: Option<i64>, end_timestamp: Option<i64>) -> Result<Vec<AverageData>, rusqlite::Error> {
+        let (query, params_vec): (&str, Vec<i64>) = match (start_timestamp, end_timestamp) {
+            (Some(start), Some(end)) => {
+                ("SELECT strftime('%m', datetime(timestamp, 'unixepoch')) as month, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 WHERE timestamp >= ? AND timestamp <= ?
+                 GROUP BY month 
+                 ORDER BY month", vec![start, end])
+            },
+            (Some(start), None) => {
+                ("SELECT strftime('%m', datetime(timestamp, 'unixepoch')) as month, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 WHERE timestamp >= ?
+                 GROUP BY month 
+                 ORDER BY month", vec![start])
+            },
+            _ => {
+                ("SELECT strftime('%m', datetime(timestamp, 'unixepoch')) as month, 
+                 AVG(temperature) as avg_temp, AVG(humidity) as avg_hum, COUNT(*) as count
+                 FROM Measurement 
+                 GROUP BY month 
+                 ORDER BY month", vec![])
+            }
+        };
+
+        let mut stmt = self.connection.prepare(query)?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+        
+        let month_names = ["January", "February", "March", "April", "May", "June", 
+                          "July", "August", "September", "October", "November", "December"];
+        
+        let result_iter = stmt.query_map(params_refs.as_slice(), |row| {
+            let month_num: String = row.get(0)?;
+            let month_idx = month_num.parse::<usize>().ok().and_then(|m| m.checked_sub(1));
+            let label = month_idx.and_then(|idx| month_names.get(idx)).unwrap_or(&"Unknown").to_string();
+            Ok(AverageData {
+                label,
+                avg_temperature: row.get(1)?,
+                avg_humidity: row.get(2)?,
+                count: row.get(3)?,
+            })
+        })?;
+
+        Ok(result_iter.filter_map(|r| r.ok()).collect())
     }
 }
