@@ -2,7 +2,6 @@ mod lib;
 use lib::{Measurement, AverageData};
 use rusqlite::Connection;
 use rocket::serde::json::Json;
-use rocket::State;
 
 #[macro_use] extern crate rocket;
 #[get("/current")]

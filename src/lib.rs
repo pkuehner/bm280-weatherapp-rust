@@ -235,9 +235,10 @@ impl<'a> DbService<'a> {
         
         let result_iter = stmt.query_map(params_refs.as_slice(), |row| {
             let month_num: String = row.get(0)?;
-            let month_idx = month_num.parse::<usize>().unwrap_or(1).saturating_sub(1);
+            let month_idx = month_num.parse::<usize>().ok().and_then(|m| m.checked_sub(1));
+            let label = month_idx.and_then(|idx| month_names.get(idx)).unwrap_or(&"Unknown").to_string();
             Ok(AverageData {
-                label: month_names.get(month_idx).unwrap_or(&"Unknown").to_string(),
+                label,
                 avg_temperature: row.get(1)?,
                 avg_humidity: row.get(2)?,
                 count: row.get(3)?,
